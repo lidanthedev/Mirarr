@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 
 {% block title %}{{ page_title }} - Mirrarr{% endblock %}
@@ -12,8 +11,14 @@
 
     <div class="max-w-5xl mx-auto space-y-4">
         <div class="flex items-center justify-between text-sm text-slate-400 px-1">
-            <span>Drag the handle to change load order.</span>
-            <span>Changes save immediately.</span>
+            <span>Drag the handle in the loaded section to change load order.</span>
+            <button
+                hx-post="/plugins/reload"
+                hx-target="#plugins-list"
+                hx-swap="innerHTML"
+                class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 transition-colors">
+                Rescan plugins
+            </button>
         </div>
 
         <div id="plugins-list">
@@ -28,13 +33,11 @@
         let isSaving = false;
 
         function rows() {
-            return Array.from(document.querySelectorAll('[data-plugin-id]'));
+            return Array.from(document.querySelectorAll('#loaded-plugin-list-body [data-plugin-id]'));
         }
 
         function attachDragHandlers() {
             rows().forEach(row => {
-                row.setAttribute('draggable', 'true');
-
                 row.addEventListener('dragstart', function (event) {
                     draggedId = row.dataset.pluginId;
                     row.classList.add('opacity-60');
@@ -58,9 +61,9 @@
                     const sourceId = draggedId || event.dataTransfer.getData('text/plain');
                     if (!sourceId || sourceId === targetId) return;
 
-                    const list = document.getElementById('plugin-list-body');
-                    const sourceRow = document.querySelector('[data-plugin-id="' + CSS.escape(sourceId) + '"]');
-                    const targetRow = document.querySelector('[data-plugin-id="' + CSS.escape(targetId) + '"]');
+                    const list = document.getElementById('loaded-plugin-list-body');
+                    const sourceRow = document.querySelector('#loaded-plugin-list-body [data-plugin-id="' + CSS.escape(sourceId) + '"]');
+                    const targetRow = document.querySelector('#loaded-plugin-list-body [data-plugin-id="' + CSS.escape(targetId) + '"]');
                     if (!list || !sourceRow || !targetRow) return;
 
                     const rect = targetRow.getBoundingClientRect();

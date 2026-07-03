@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,6 +22,8 @@ class PluginStateEntry(BaseModel):
     enabled: bool = True
     order: int = 0
     title: str | None = None
+    status: Literal["loaded", "disabled", "error", "missing"] = "loaded"
+    error_message: str | None = None
 
 
 class PluginManifest(BaseModel):
@@ -83,6 +86,7 @@ def sync_manifest_with_files(plugins_root: Path, manifest: PluginManifest) -> tu
                 enabled=True,
                 order=_next_order(manifest.plugins),
                 title=plugin_id,
+                status="loaded",
             )
         )
         changed = True

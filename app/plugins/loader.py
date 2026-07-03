@@ -1,5 +1,4 @@
-
-"""Filesystem plugin discovery and seeding."""
+"""Filesystem plugin discovery, seeding, and runtime reload."""
 
 from __future__ import annotations
 
@@ -17,6 +16,15 @@ from pydantic import ValidationError
 
 from app.core.config import get_settings
 from app.plugins.base import PluginConfig, PluginInterface
+from app.plugins.state import (
+    PluginManifest,
+    PluginStateEntry,
+    build_plugin_entry_map,
+    get_plugins_root,
+    load_manifest,
+    save_manifest,
+    sync_manifest_with_files,
+)
 from app.providers import ProviderRegistry
 
 logger = logging.getLogger(__name__)
@@ -28,12 +36,6 @@ def _sanitize_module_name(name: str) -> str:
 
 def _bundled_plugins_root() -> Path:
     return Path(__file__).resolve().parent / "bundled"
-
-
-def _data_plugins_root(data_dir: Path | None = None) -> Path:
-    if data_dir is None:
-        data_dir = Path(get_settings().data_dir)
-    return Path(data_dir) / "plugins"
 
 
 def seed_bundled_plugins(plugins_root: Path) -> bool:
@@ -113,9 +115,7 @@ def _load_plugin_config(plugin_dir: Path, plugin_cls: type[PluginInterface]) -> 
         return None
 
     if not inspect.isclass(config_model) or not issubclass(config_model, PluginConfig):
-        raise TypeError(
-            f"{plugin_cls.__name__}.config_model must inherit from PluginConfig"
-        )
+        raise TypeError(f"{plugin_cls.__name__}.config_model must inherit from PluginConfig")
 
     config_path = plugin_dir / "config.json"
     try:
@@ -152,24 +152,109 @@ def _close_provider_best_effort(provider: PluginInterface) -> None:
     running_loop.create_task(close())
 
 
+def _close_all_providers() -> None:
+    for provider in ProviderRegistry.all():
+        _close_provider_best_effort(provider)
+
+
+def get_plugin_manifest(data_dir: Path | None = None) -> PluginManifest:
+    """Return the current plugin manifest, seeded and synced with files."""
+    plugins_root = get_plugins_root(data_dir)
+    seed_bundled_plugins(plugins_root)
+    plugins_root.mkdir(parents=True, exist_ok=True)
+    manifest = load_manifest(plugins_root)
+    manifest, changed = sync_manifest_with_files(plugins_root, manifest)
+    if changed:
+        save_manifest(plugins_root, manifest)
+    return manifest
+
+
+def get_plugin_overview(data_dir: Path | None = None) -> list[dict[str, object]]:
+    """Return plugin metadata for the plugins page."""
+    plugins_root = get_plugins_root(data_dir)
+    manifest = get_plugin_manifest(data_dir)
+    entry_map = build_plugin_entry_map(manifest)
+
+    overview: list[dict[str, object]] = []
+    if plugins_root.exists():
+        for plugin_dir in sorted(path for path in plugins_root.iterdir() if path.is_dir()):
+            plugin_id = plugin_dir.name
+            state = entry_map.get(plugin_id)
+            overview.append(
+                {
+                    "plugin_id": plugin_id,
+                    "title": state.title if state and state.title else plugin_id,
+                    "enabled": state.enabled if state else True,
+                    "order": state.order if state else 0,
+                    "exists": True,
+                    "config_exists": (plugin_dir / "config.json").exists(),
+                    "path": str(plugin_dir),
+                }
+            )
+
+    known_dirs = {row["plugin_id"] for row in overview}
+    for state in sorted(manifest.plugins, key=lambda entry: (entry.order, entry.plugin_id)):
+        if state.plugin_id in known_dirs:
+            continue
+        overview.append(
+            {
+                "plugin_id": state.plugin_id,
+                "title": state.title or state.plugin_id,
+                "enabled": state.enabled,
+                "order": state.order,
+                "exists": False,
+                "config_exists": False,
+                "path": str(plugins_root / state.plugin_id),
+            }
+        )
+
+    overview.sort(key=lambda row: (int(row["order"]), str(row["plugin_id"])))
+    return overview
+
+
+def reload_plugins(data_dir: Path | None = None) -> list[str]:
+    """Close loaded providers, clear the registry, and load plugins again."""
+    _close_all_providers()
+    ProviderRegistry.clear()
+    return load_plugins(data_dir)
+
+
 def load_plugins(data_dir: Path | None = None) -> list[str]:
     """Load plugins from the data/plugins directory."""
-    plugins_root = _data_plugins_root(data_dir)
+    settings = get_settings()
+    if data_dir is None:
+        data_dir = Path(settings.data_dir)
+    plugins_root = get_plugins_root(data_dir)
     seed_bundled_plugins(plugins_root)
+    plugins_root.mkdir(parents=True, exist_ok=True)
 
     if not plugins_root.exists():
         logger.info("Plugin directory does not exist: %s", plugins_root)
         return []
 
+    manifest = load_manifest(plugins_root)
+    manifest, changed = sync_manifest_with_files(plugins_root, manifest)
+    if changed:
+        save_manifest(plugins_root, manifest)
+
+    entry_map = build_plugin_entry_map(manifest)
     loaded_plugins: list[str] = []
 
     for plugin_dir in sorted(path for path in plugins_root.iterdir() if path.is_dir()):
+        plugin_id = plugin_dir.name
+        state = entry_map.get(plugin_id)
+        if state is None:
+            continue
+        if not state.enabled:
+            logger.info("Skipping disabled plugin %s", plugin_id)
+            continue
+
         plugin_file = plugin_dir / "plugin.py"
         if not plugin_file.exists():
             logger.warning("Skipping %s: missing plugin.py", plugin_dir)
             continue
 
-        module_name = f"mirrarr_plugins.{_sanitize_module_name(plugin_dir.name)}.plugin"
+        module_name = f"mirrarr_plugins.{_sanitize_module_name(plugin_id)}.plugin"
         try:
             module = _load_module_from_path(module_name, plugin_file)
             plugin_cls = _find_plugin_class(module)
@@ -194,9 +279,48 @@ def load_plugins(data_dir: Path | None = None) -> list[str]:
                 continue
 
             ProviderRegistry.register(provider)
+            state.title = provider.name
             loaded_plugins.append(provider.name)
             logger.info("Loaded plugin %s from %s", provider.name, plugin_dir)
         except Exception:
             logger.exception("Failed to load plugin from %s", plugin_dir)
 
+    save_manifest(plugins_root, manifest)
     return loaded_plugins
+
+
+def set_plugin_enabled(data_dir: Path | None, plugin_id: str, enabled: bool) -> list[str]:
+    plugins_root = get_plugins_root(data_dir)
+    manifest = get_plugin_manifest(data_dir)
+    updated = False
+    for entry in manifest.plugins:
+        if entry.plugin_id == plugin_id:
+            entry.enabled = enabled
+            updated = True
+            break
+    if updated:
+        save_manifest(plugins_root, manifest)
+    return reload_plugins(data_dir)
+
+
+def set_plugin_order(data_dir: Path | None, ordered_ids: list[str]) -> list[str]:
+    plugins_root = get_plugins_root(data_dir)
+    manifest = get_plugin_manifest(data_dir)
+    lookup = build_plugin_entry_map(manifest)
+    new_plugins: list[PluginStateEntry] = []
+
+    for index, plugin_id in enumerate(ordered_ids):
+        entry = lookup.get(plugin_id)
+        if entry is None:
+            continue
+        entry.order = index
+        new_plugins.append(entry)
+
+    remaining = [entry for entry in manifest.plugins if entry.plugin_id not in ordered_ids]
+    for offset, entry in enumerate(sorted(remaining, key=lambda e: (e.order, e.plugin_id)), start=len(new_plugins)):
+        entry.order = offset
+        new_plugins.append(entry)
+
+    manifest.plugins = new_plugins
+    save_manifest(plugins_root, manifest)
+    return reload_plugins(data_dir)

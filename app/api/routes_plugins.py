@@ -1,4 +1,3 @@
-
 """UI routes for managing filesystem plugins."""
 
 import logging
@@ -9,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from app.core.config import get_settings
-from app.plugins.loader import get_plugin_overview, set_plugin_enabled, set_plugin_order
+from app.plugins.loader import get_plugin_overview, reload_plugins, set_plugin_enabled, set_plugin_order
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -34,6 +33,17 @@ async def plugins_page(request: Request):
 @router.get("/plugins/list")
 async def plugins_list(request: Request):
     """Return the plugin list partial."""
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/plugin_list.html",
+        context={"plugins": get_plugin_overview()},
+    )
+
+
+@router.post("/plugins/reload")
+async def reload_plugins_view(request: Request):
+    """Reload plugins and refresh the page state."""
+    reload_plugins(Path(get_settings().data_dir))
     return templates.TemplateResponse(
         request=request,
         name="partials/plugin_list.html",

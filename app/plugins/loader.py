@@ -78,7 +78,7 @@ def _load_module_from_path(module_name: str, module_path: Path) -> object:
     return module
 
 
-def _find_plugin_class(module: object) -> type[PluginInterface] | None:
+def _find_plugin_class(module: object) -> tuple[type[PluginInterface] | None, str | None]:
     candidates: list[type[PluginInterface]] = []
     for value in module.__dict__.values():
         if not inspect.isclass(value):
@@ -94,48 +94,41 @@ def _find_plugin_class(module: object) -> type[PluginInterface] | None:
         candidates.append(value)
 
     if not candidates:
-        logger.warning("No concrete PluginInterface subclass found in %s", module.__name__)
-        return None
+        return None, "No concrete PluginInterface subclass found"
 
     if len(candidates) > 1:
         names = ", ".join(candidate.__name__ for candidate in candidates)
-        logger.warning(
-            "Multiple PluginInterface subclasses found in %s (%s); skipping",
-            module.__name__,
-            names,
-        )
-        return None
+        return None, f"Multiple PluginInterface subclasses found: {names}"
 
-    return candidates[0]
+    return candidates[0], None
 
 
-def _load_plugin_config(plugin_dir: Path, plugin_cls: type[PluginInterface]) -> PluginConfig | None:
+def _load_plugin_config(
+    plugin_dir: Path,
+    plugin_cls: type[PluginInterface],
+) -> tuple[PluginConfig | None, str | None]:
     config_model = getattr(plugin_cls, "config_model", None)
     if config_model is None:
-        return None
+        return None, None
 
     if not inspect.isclass(config_model) or not issubclass(config_model, PluginConfig):
-        raise TypeError(f"{plugin_cls.__name__}.config_model must inherit from PluginConfig")
+        return None, f"{plugin_cls.__name__}.config_model must inherit from PluginConfig"
 
     config_path = plugin_dir / "config.json"
     try:
         if config_path.exists():
             raw_config = json.loads(config_path.read_text(encoding="utf-8"))
-            return config_model.model_validate(raw_config)
+            return config_model.model_validate(raw_config), None
 
         config = config_model()
         config_path.write_text(
-            json.dumps(config.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
+            json.dumps(config.model_dump(mode="json"), indent=2, sort_keys=True) + "
+",
             encoding="utf-8",
         )
-        return config
-    except (OSError, TypeError, ValueError, ValidationError):
-        logger.exception(
-            "Failed to load or write config for plugin %s in %s",
-            plugin_cls.__name__,
-            plugin_dir,
-        )
-        return None
+        return config, None
+    except (OSError, TypeError, ValueError, ValidationError) as exc:
+        return None, f"Invalid config.json: {exc}"
 
 
 def _close_provider_best_effort(provider: PluginInterface) -> None:
@@ -157,6 +150,19 @@ def _close_all_providers() -> None:
         _close_provider_best_effort(provider)
 
 
+def _set_entry_state(
+    entry: PluginStateEntry,
+    *,
+    status: str,
+    error_message: str | None = None,
+    title: str | None = None,
+) -> None:
+    entry.status = status  # type: ignore[assignment]
+    entry.error_message = error_message
+    if title is not None:
+        entry.title = title
+
+
 def get_plugin_manifest(data_dir: Path | None = None) -> PluginManifest:
     """Return the current plugin manifest, seeded and synced with files."""
     plugins_root = get_plugins_root(data_dir)
@@ -169,6 +175,16 @@ def get_plugin_manifest(data_dir: Path | None = None) -> PluginManifest:
     return manifest
 
 
+def _status_rank(status: str) -> int:
+    if status == "loaded":
+        return 0
+    if status == "disabled":
+        return 1
+    if status == "error":
+        return 2
+    return 3
+
+
 def get_plugin_overview(data_dir: Path | None = None) -> list[dict[str, object]]:
     """Return plugin metadata for the plugins page."""
     plugins_root = get_plugins_root(data_dir)
@@ -176,39 +192,31 @@ def get_plugin_overview(data_dir: Path | None = None) -> list[dict[str, object]]
     entry_map = build_plugin_entry_map(manifest)
 
     overview: list[dict[str, object]] = []
-    if plugins_root.exists():
-        for plugin_dir in sorted(path for path in plugins_root.iterdir() if path.is_dir()):
-            plugin_id = plugin_dir.name
-            state = entry_map.get(plugin_id)
-            overview.append(
-                {
-                    "plugin_id": plugin_id,
-                    "title": state.title if state and state.title else plugin_id,
-                    "enabled": state.enabled if state else True,
-                    "order": state.order if state else 0,
-                    "exists": True,
-                    "config_exists": (plugin_dir / "config.json").exists(),
-                    "path": str(plugin_dir),
-                }
-            )
+    existing_dirs = {path.name for path in plugins_root.iterdir() if path.is_dir()} if plugins_root.exists() else set()
 
-    known_dirs = {row["plugin_id"] for row in overview}
-    for state in sorted(manifest.plugins, key=lambda entry: (entry.order, entry.plugin_id)):
-        if state.plugin_id in known_dirs:
-            continue
+    for entry in sorted(manifest.plugins, key=lambda e: (e.order, e.plugin_id)):
+        plugin_dir = plugins_root / entry.plugin_id
+        plugin_exists = entry.plugin_id in existing_dirs
+        status = entry.status
+        error_message = entry.error_message
+        if not plugin_exists:
+            status = "missing"
+            error_message = "Plugin folder not found"
         overview.append(
             {
-                "plugin_id": state.plugin_id,
-                "title": state.title or state.plugin_id,
-                "enabled": state.enabled,
-                "order": state.order,
-                "exists": False,
-                "config_exists": False,
-                "path": str(plugins_root / state.plugin_id),
+                "plugin_id": entry.plugin_id,
+                "title": entry.title or entry.plugin_id,
+                "enabled": entry.enabled,
+                "order": entry.order,
+                "status": status,
+                "error_message": error_message,
+                "exists": plugin_exists,
+                "config_exists": (plugin_dir / "config.json").exists(),
+                "path": str(plugin_dir),
             }
         )
 
-    overview.sort(key=lambda row: (int(row["order"]), str(row["plugin_id"])))
+    overview.sort(key=lambda row: (_status_rank(str(row["status"])), int(row["order"]), str(row["plugin_id"])))
     return overview
 
 
@@ -228,62 +236,79 @@ def load_plugins(data_dir: Path | None = None) -> list[str]:
     seed_bundled_plugins(plugins_root)
     plugins_root.mkdir(parents=True, exist_ok=True)
 
-    if not plugins_root.exists():
-        logger.info("Plugin directory does not exist: %s", plugins_root)
-        return []
-
     manifest = load_manifest(plugins_root)
     manifest, changed = sync_manifest_with_files(plugins_root, manifest)
     if changed:
         save_manifest(plugins_root, manifest)
 
     entry_map = build_plugin_entry_map(manifest)
+    existing_dirs = {path.name for path in plugins_root.iterdir() if path.is_dir()}
+
+    for entry in manifest.plugins:
+        if entry.plugin_id not in existing_dirs:
+            _set_entry_state(entry, status="missing", error_message="Plugin folder not found")
+
     loaded_plugins: list[str] = []
 
     for plugin_dir in sorted(path for path in plugins_root.iterdir() if path.is_dir()):
         plugin_id = plugin_dir.name
-        state = entry_map.get(plugin_id)
-        if state is None:
+        entry = entry_map.get(plugin_id)
+        if entry is None:
             continue
-        if not state.enabled:
-            logger.info("Skipping disabled plugin %s", plugin_id)
+
+        if not entry.enabled:
+            _set_entry_state(entry, status="disabled", error_message=None)
             continue
 
         plugin_file = plugin_dir / "plugin.py"
         if not plugin_file.exists():
-            logger.warning("Skipping %s: missing plugin.py", plugin_dir)
+            _set_entry_state(entry, status="error", error_message="plugin.py missing")
             continue
 
         module_name = f"mirrarr_plugins.{_sanitize_module_name(plugin_id)}.plugin"
         try:
             module = _load_module_from_path(module_name, plugin_file)
-            plugin_cls = _find_plugin_class(module)
-            if plugin_cls is None:
-                continue
-
-            config = _load_plugin_config(plugin_dir, plugin_cls)
-            if plugin_cls.config_model is not None and config is None:
-                continue
-
-            provider = plugin_cls()
-            if config is not None:
-                provider.config = config
-
-            if ProviderRegistry.get(provider.name) is not None:
-                logger.warning(
-                    "Skipping plugin %s from %s: provider name already registered",
-                    provider.name,
-                    plugin_dir,
-                )
-                _close_provider_best_effort(provider)
-                continue
-
-            ProviderRegistry.register(provider)
-            state.title = provider.name
-            loaded_plugins.append(provider.name)
-            logger.info("Loaded plugin %s from %s", provider.name, plugin_dir)
-        except Exception:
+        except Exception as exc:
+            _set_entry_state(entry, status="error", error_message=f"Import failed: {exc}")
             logger.exception("Failed to load plugin from %s", plugin_dir)
+            continue
+
+        plugin_cls, class_error = _find_plugin_class(module)
+        if plugin_cls is None:
+            _set_entry_state(entry, status="error", error_message=class_error)
+            logger.warning("%s in %s", class_error, plugin_dir)
+            continue
+
+        config, config_error = _load_plugin_config(plugin_dir, plugin_cls)
+        if config_error is not None:
+            _set_entry_state(entry, status="error", error_message=config_error)
+            logger.warning("Failed to load config for plugin in %s: %s", plugin_dir, config_error)
+            continue
+
+        try:
+            provider = plugin_cls()
+        except Exception as exc:
+            _set_entry_state(entry, status="error", error_message=f"Plugin init failed: {exc}")
+            logger.exception("Failed to initialize plugin in %s", plugin_dir)
+            continue
+
+        if config is not None:
+            provider.config = config
+
+        if ProviderRegistry.get(provider.name) is not None:
+            _set_entry_state(entry, status="error", error_message=f"Provider name already registered: {provider.name}")
+            logger.warning(
+                "Skipping plugin %s from %s: provider name already registered",
+                provider.name,
+                plugin_dir,
+            )
+            _close_provider_best_effort(provider)
+            continue
+
+        ProviderRegistry.register(provider)
+        _set_entry_state(entry, status="loaded", error_message=None, title=provider.name)
+        loaded_plugins.append(provider.name)
+        logger.info("Loaded plugin %s from %s", provider.name, plugin_dir)
 
     save_manifest(plugins_root, manifest)
     return loaded_plugins

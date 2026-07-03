@@ -1,4 +1,4 @@
-"""Dummy provider for testing the UI flow."""
+"""Rivestream provider"""
 
 import logging
 from cachetools import cached

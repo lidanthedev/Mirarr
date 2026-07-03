@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class AcerMoviesProvider(PluginInterface):
     """AcerMovies provider implementation."""
 
-    API_BASE_URL = "https://api.acermovies.fun/api"
+    API_BASE_URL = "https://api2.acermovies.fun/api"
     DEFAULT_HEADERS: ClassVar[dict[str, str]] = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
         "Referer": "https://acermovies.fun/",

@@ -122,8 +122,7 @@ def _load_plugin_config(
 
         config = config_model()
         config_path.write_text(
-            json.dumps(config.model_dump(mode="json"), indent=2, sort_keys=True) + "
-",
+            json.dumps(config.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         return config, None

@@ -30,6 +30,11 @@ class ProviderRegistry:
         """Get names of all registered providers."""
         return list(cls._providers.keys())
 
+    @classmethod
+    def clear(cls) -> None:
+        """Remove all registered providers."""
+        cls._providers.clear()
+
 
 # Convenience function for registration
 def register_provider(provider: ProviderInterface) -> None:

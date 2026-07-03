@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.api.routes_api import router as api_router
 from app.api.routes_ui import router as ui_router
+from app.api.routes_plugins import router as plugins_router
 from app.core.auth import BasicAuthMiddleware
 from app.plugins.loader import load_plugins
 from app.providers import ProviderRegistry
@@ -62,4 +63,5 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # Include routers
 app.include_router(ui_router)
+app.include_router(plugins_router)
 app.include_router(api_router, prefix="/api")

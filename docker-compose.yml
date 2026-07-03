@@ -9,5 +9,7 @@ services:
       - ./data:/app/data
     environment:
       - DATABASE_URL=sqlite:///./data/mirrarr.db
+      - AUTH_USERNAME=${AUTH_USERNAME}
+      - AUTH_PASSWORD=${AUTH_PASSWORD}
     env_file:
       - .env

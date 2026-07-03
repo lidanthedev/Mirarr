@@ -45,9 +45,9 @@ def mock_provider():
 
 
 @pytest.fixture
-def client(mock_provider):
+def client(mock_provider, auth_headers):
     """Create a TestClient with the mock provider registered."""
-    return TestClient(app)
+    return TestClient(app, headers=auth_headers)
 
 
 def test_download_queue_post(client):

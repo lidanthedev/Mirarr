@@ -24,6 +24,8 @@ A "Sonarr-like" personal video recorder (PVR) for Direct Download (DDL) content.
     Required variables:
     ```env
     TMDB_API_KEY=your_tmdb_api_key_here # Get one at https://www.themoviedb.org/settings/api
+    AUTH_USERNAME=admin
+    AUTH_PASSWORD=changeme
     ```
 
 3.  **Run with Docker Compose**:
@@ -51,6 +53,7 @@ Mirrarr uses `uv` for fast package management and virtual environment handling.
     uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ```
     The application will be available at `http://localhost:8000`.
+    Basic auth protects the dashboard, API, static assets, and health endpoint.
 
 ## Creating a Custom Provider
 

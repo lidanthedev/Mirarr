@@ -56,7 +56,7 @@ app = FastAPI(
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# Add authentication middleware (only active when AUTH_USERNAME + AUTH_PASSWORD are set)
+# Add authentication middleware for all routes
 app.add_middleware(BasicAuthMiddleware)
 
 # Initialize Jinja2 templates (shared across routers)

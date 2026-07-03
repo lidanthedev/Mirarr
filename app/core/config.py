@@ -46,7 +46,7 @@ class Settings(BaseSettings):
             raise ValueError("Proxy must have a host and port")
         return v
 
-    # Authentication (leave empty to disable)
+    # Authentication credentials used by the Basic Auth middleware
     auth_username: str = ""
     auth_password: SecretStr = SecretStr("")
 

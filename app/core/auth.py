@@ -1,7 +1,7 @@
 """Basic HTTP authentication middleware.
 
-Enabled only when AUTH_USERNAME and AUTH_PASSWORD env vars are both set.
-When disabled (default), all requests pass through without auth.
+The app expects AUTH_USERNAME and AUTH_PASSWORD to be configured and
+protects every request with HTTP Basic Auth.
 """
 
 import base64
@@ -15,20 +15,15 @@ from app.core.config import get_settings
 
 
 class BasicAuthMiddleware(BaseHTTPMiddleware):
-    """Middleware that enforces HTTP Basic Auth when credentials are configured."""
+    """Middleware that enforces HTTP Basic Auth for every request."""
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         settings = get_settings()
 
-        # Skip auth if credentials aren't configured
-        if not settings.auth_username or not settings.auth_password:
-            return await call_next(request)
-
-        # Allow health check without auth (useful for monitoring/docker)
-        if request.url.path == "/api/health":
-            return await call_next(request)
+        if not self._credentials_configured(settings):
+            return self._unauthorized()
 
         # Check for Authorization header
         auth_header = request.headers.get("Authorization")
@@ -46,7 +41,6 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
         except ValueError:
             return self._unauthorized()
 
-        # Constant-time comparison to prevent timing attacks (using bytes)
         username_ok = secrets.compare_digest(
             username.encode("utf-8"),
             settings.auth_username.encode("utf-8"),
@@ -60,6 +54,12 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
             return self._unauthorized()
 
         return await call_next(request)
+
+    @staticmethod
+    def _credentials_configured(settings) -> bool:
+        return bool(
+            settings.auth_username and settings.auth_password.get_secret_value()
+        )
 
     @staticmethod
     def _unauthorized() -> Response:

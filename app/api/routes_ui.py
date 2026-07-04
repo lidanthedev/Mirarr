@@ -6,7 +6,7 @@ from pathlib import Path
 import asyncio
 from fastapi import APIRouter, Request, Form
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from fastapi.responses import JSONResponse
 
 from app.services.tmdb import (
@@ -362,6 +362,15 @@ class DownloadQueueRequest(BaseModel):
     season: int = 1
     episode: int = 1
     filename: str = ""
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        from urllib.parse import urlparse
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("URL must use http or https scheme")
+        return v
 
 
 @router.post("/download/queue")

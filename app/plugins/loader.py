@@ -120,12 +120,21 @@ def _load_plugin_config(
             raw_config = json.loads(config_path.read_text(encoding="utf-8"))
             return config_model.model_validate(raw_config), None
 
-        config = config_model()
+        # Write a config template with field defaults so the user can fill it in.
+        # Build a dict of field defaults; required fields get an empty placeholder.
+        from pydantic_core import PydanticUndefined
+
+        template: dict[str, Any] = {}
+        for name, field in config_model.model_fields.items():
+            if field.default is not PydanticUndefined and field.default is not None:
+                template[name] = field.default
+            else:
+                template[name] = ""
         config_path.write_text(
-            json.dumps(config.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
+            json.dumps(template, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        return config, None
+        return config_model.model_validate(template), None
     except (OSError, TypeError, ValueError, ValidationError) as exc:
         return None, f"Invalid config.json: {exc}"
 

@@ -356,11 +356,16 @@ async def movie_auto(
     )
 
 
-ValidUrl = Annotated[str, AfterValidator(lambda v: str(HttpUrl(v)))]
+def _validate_url(v: str) -> str:
+    from urllib.parse import urlparse
+    parsed = urlparse(v)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("URL must use http or https scheme")
+    return v
 
 
 class DownloadQueueRequest(BaseModel):
-    url: ValidUrl
+    url: Annotated[str, AfterValidator(_validate_url)]
     quality: str = ""
     source: str = ""
     media_type: str = "movie"

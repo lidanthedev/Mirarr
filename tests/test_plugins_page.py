@@ -9,6 +9,12 @@ from app.plugins.loader import get_plugin_overview, load_plugins, set_plugin_ena
 from app.providers import ProviderRegistry
 
 
+@pytest.fixture(autouse=True)
+def no_bundled_seeding(monkeypatch: pytest.MonkeyPatch):
+    """Prevent bundled plugins from being seeded into test directories."""
+    monkeypatch.setattr("app.plugins.loader._bundled_plugins_root", lambda: Path("/nonexistent"))
+
+
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("TMDB_API_KEY", "dummy")
@@ -22,11 +28,9 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 def _write_plugin(plugin_dir: Path, class_name: str, provider_name: str, *, broken: bool = False) -> None:
     plugin_dir.mkdir(parents=True, exist_ok=True)
     if broken:
-        source = "raise RuntimeError('boom')
-"
+        source = "raise RuntimeError('boom')\n"
     else:
-        source = "
-".join([
+        source = "\n".join([
             "from app.plugins.base import PluginInterface",
             "",
             f"class {class_name}(PluginInterface):",

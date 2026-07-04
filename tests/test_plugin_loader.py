@@ -21,16 +21,29 @@ def clear_registry():
     ProviderRegistry.clear()
 
 
+@pytest.fixture(autouse=True)
+def no_bundled_seeding(monkeypatch: pytest.MonkeyPatch):
+    """Prevent bundled plugins from being seeded into test directories."""
+    monkeypatch.setattr("app.plugins.loader._bundled_plugins_root", lambda: Path("/nonexistent"))
+
+
 def test_seed_bundled_plugins_creates_copy(tmp_path: Path):
     plugins_root = tmp_path / "plugins"
+    real_bundled = Path(__file__).resolve().parent.parent / "app" / "plugins" / "bundled"
 
-    seeded = seed_bundled_plugins(plugins_root)
+    import app.plugins.loader as loader_mod
+    loader_mod._bundled_plugins_root = lambda: real_bundled
+    try:
+        seeded = seed_bundled_plugins(plugins_root)
+    finally:
+        loader_mod._bundled_plugins_root = lambda: Path("/nonexistent")
 
     assert seeded is True
     assert (plugins_root / "a111477" / "plugin.py").exists()
     assert (plugins_root / "acermovies" / "plugin.py").exists()
     assert (plugins_root / "rivestream" / "plugin.py").exists()
     assert (plugins_root / "vadapav" / "plugin.py").exists()
+    assert (plugins_root / "aiostreams" / "plugin.py").exists()
 
 
 def test_load_plugins_with_default_config_creates_json(tmp_path: Path):

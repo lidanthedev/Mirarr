@@ -3,9 +3,10 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from app.core.config import get_settings
 from app.plugins.loader import get_plugin_overview, reload_plugins, set_plugin_enabled, set_plugin_order
@@ -67,14 +68,15 @@ async def toggle_plugin(request: Request, plugin_id: str):
     )
 
 
-@router.post("/plugins/reorder")
-async def reorder_plugins(request: Request, payload: dict[str, object] = Body(...)):
-    """Persist plugin order and reload the runtime."""
-    ordered_ids = payload.get("order", [])
-    if not isinstance(ordered_ids, list):
-        return JSONResponse({"message": "order must be a list"}, status_code=422)
+class ReorderPluginsRequest(BaseModel):
+    """Request model for reordering plugins."""
+    order: list[str]
 
-    set_plugin_order(Path(get_settings().data_dir), [str(item) for item in ordered_ids])
+
+@router.post("/plugins/reorder")
+async def reorder_plugins(request: Request, payload: ReorderPluginsRequest):
+    """Persist plugin order and reload the runtime."""
+    set_plugin_order(Path(get_settings().data_dir), payload.order)
     return templates.TemplateResponse(
         request=request,
         name="partials/plugin_list.html",

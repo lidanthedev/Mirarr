@@ -1,7 +1,5 @@
 """UI routes returning HTML via Jinja2 templates."""
 
-from pydantic import AfterValidator
-from typing import Annotated
 import logging
 from pathlib import Path
 
@@ -355,16 +353,8 @@ async def movie_auto(
     )
 
 
-def _validate_url(v: str) -> str:
-    from urllib.parse import urlparse
-    parsed = urlparse(v)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError("URL must use http or https scheme")
-    return v
-
-
 class DownloadQueueRequest(BaseModel):
-    url: Annotated[str, AfterValidator(_validate_url)]
+    url: str
     quality: str = ""
     source: str = ""
     media_type: str = "movie"
@@ -383,6 +373,19 @@ async def download_queue(
 
     Shows toast notification and actually queues the download.
     """
+    # Validate URL scheme in the route handler to return toast partial on error
+    from urllib.parse import urlparse
+    parsed = urlparse(download_req.url)
+    if parsed.scheme not in ("http", "https"):
+        return templates.TemplateResponse(
+            request=request,
+            name="partials/toast.html",
+            context={
+                "message": "URL must use http or https scheme",
+                "type": "error",
+            },
+        )
+
     url = download_req.url
     quality = download_req.quality
     source = download_req.source

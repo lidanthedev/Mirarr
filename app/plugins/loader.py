@@ -32,6 +32,9 @@ from app.providers.base import ProviderInterface
 
 logger = logging.getLogger(__name__)
 
+# Keep strong references to background cleanup tasks to prevent garbage collection
+_background_tasks: set[asyncio.Task] = set()
+
 
 def _sanitize_module_name(name: str) -> str:
     return re.sub(r"\W+", "_", name).strip("_") or "plugin"
@@ -169,7 +172,10 @@ def _close_provider_best_effort(provider: ProviderInterface) -> None:
         asyncio.run(close())
         return
 
-    running_loop.create_task(close())
+    # Keep a strong reference to the task to prevent garbage collection
+    task = running_loop.create_task(close())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 def _close_all_providers() -> None:

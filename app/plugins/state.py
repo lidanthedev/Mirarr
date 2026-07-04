@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 MANIFEST_FILENAME = ".mirrarr-plugins.json"
 
@@ -53,7 +56,19 @@ def load_manifest(plugins_root: Path) -> PluginManifest:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return PluginManifest.model_validate(data)
-    except Exception:
+    except (json.JSONDecodeError, ValidationError) as exc:
+        logger.error(
+            "Failed to parse plugin manifest at %s: %s. Resetting to empty manifest.",
+            path,
+            exc,
+        )
+        return PluginManifest()
+    except OSError as exc:
+        logger.error(
+            "Failed to read plugin manifest at %s: %s. Resetting to empty manifest.",
+            path,
+            exc,
+        )
         return PluginManifest()
 
 

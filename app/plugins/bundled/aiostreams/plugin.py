@@ -45,8 +45,10 @@ class AIOStreamsProvider(PluginInterface):
             r"^/stremio/([a-f0-9-]+)/(.+)/manifest\.json$", path
         )
         if not match:
-            logger.error("Invalid AIOStreams manifest URL format: %s", url)
-            return None
+            raise ValueError(
+                f"Invalid AIOStreams manifest URL format: {url}. "
+                "Expected: https://<base>/stremio/<uuid>/<encrypted_password>/manifest.json"
+            )
 
         base_url = f"{parsed.scheme}://{parsed.netloc}"
         uuid = match.group(1)
@@ -57,7 +59,10 @@ class AIOStreamsProvider(PluginInterface):
         """Fetch streams from the AIOStreams Stremio endpoint."""
         parsed = self._parse_manifest_url()
         if not parsed:
-            return []
+            raise ValueError(
+                "AIOStreams manifest_url is not configured. "
+                "Set it in the plugin's config.json."
+            )
 
         base_url, uuid, encrypted_password = parsed
         stream_url = f"{base_url}/stremio/{uuid}/{encrypted_password}/stream/{type}/{id}.json"

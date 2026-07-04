@@ -1,21 +1,24 @@
+
 """Configuration management for Mirrarr."""
 
-from pydantic import PositiveInt, field_validator
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
-from pydantic import SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from urllib.parse import urlparse
+
+from pydantic import PositiveInt, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # TMDB
-    tmdb_api_key: str
+    tmdb_api_key: str = ""
 
-    # Database
+    # Database and runtime data
     database_url: str = "sqlite:///./mirrarr.db"
+    data_dir: Path = Path("./data")
 
     # Redis (for Celery)
     redis_url: str = "redis://localhost:6379/0"

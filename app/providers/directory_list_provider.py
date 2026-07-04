@@ -8,7 +8,8 @@ from cachetools import TTLCache
 from urllib3.util import Retry
 
 from app.models.media import Movie, TVSeries
-from app.providers.base import EpisodeResult, MovieResult, ProviderInterface
+from app.providers.base import EpisodeResult, MovieResult
+from app.plugins.base import PluginInterface
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -55,7 +56,7 @@ class FileEntry(NamedTuple):
     size: float  # Size in bytes
 
 
-class DirectoryListProvider(ProviderInterface):
+class DirectoryListProvider(PluginInterface):
     """Abstract base class for providers that parse directory listings.
 
     Subclasses must implement:

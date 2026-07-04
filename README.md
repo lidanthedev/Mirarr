@@ -52,22 +52,28 @@ Mirrarr uses `uv` for fast package management and virtual environment handling.
     ```
     The application will be available at `http://localhost:8000`.
 
-## Creating a Custom Provider
+## Creating a Custom Plugin
 
-Mirrarr supports custom providers for fetching DDL links. Follow these steps to add a new provider.
+Mirrarr supports filesystem plugins for fetching DDL links. Each plugin lives in its own folder under the data plugins directory and is loaded from `plugin.py` at startup.
 
-### 1. Create the Provider File
+### 1. Create the Plugin Folder
 
-Create a new file in `app/providers/`, e.g., `app/providers/my_custom_provider.py`.
+Create a new folder inside `<data_dir>/plugins/`, e.g., `data/plugins/my_custom_provider/`.
 
-Inherit from `ProviderInterface` and implement the required methods:
+Implement `PluginInterface`, and add a `config_model` extending `PluginConfig` if your plugin needs configuration:
 
 ```python
 from typing import List, Any
-from app.providers.base import ProviderInterface, MovieResult, EpisodeResult
+from app.plugins.base import PluginInterface, PluginConfig
+from app.providers.base import MovieResult, EpisodeResult
 from app.models.media import Movie, TVSeries
 
-class MyCustomProvider(ProviderInterface):
+class MyConfig(PluginConfig):
+    api_key: str = ""
+
+class MyCustomProvider(PluginInterface):
+    config_model = MyConfig
+
     @property
     def name(self) -> str:
         """Unique name of the provider."""
@@ -118,22 +124,15 @@ class MyCustomProvider(ProviderInterface):
         }
 ```
 
-### 2. Register the Provider
+### 2. Let Mirrarr Load It
 
-Open `app/main.py` and register your new provider instance:
+Drop `plugin.py` into the plugin folder and restart Mirrarr. The loader will import every `plugin.py`, validate that it implements `PluginInterface`, and register it automatically.
 
-```python
-from app.providers import register_provider
-# ... other imports ...
-from app.providers.my_custom_provider import MyCustomProvider  # Import your class
-
-# ... existing registrations ...
-register_provider(MyCustomProvider())
-```
+If your plugin defines a `config_model`, Mirrarr will read or create a `config.json` next to `plugin.py` and validate it with Pydantic.
 
 ### 3. Restart the Application
 
-Restart Mirrarr. Your new provider will now be queried when searching for content.
+Restart Mirrarr. Your new plugin will now be queried when searching for content.
 
 ## Contributing
 
@@ -145,4 +144,9 @@ We welcome contributions! If you've created a custom provider that you think wou
 4.  **Push to the branch** (`git push origin feature/AmazingProvider`).
 5.  **Open a Pull Request**.
 
-Please ensure your provider follows the `ProviderInterface` and includes appropriate error handling. Using `uvx ruff check .` and `uvx ruff format .` is highly recommended before submitting.
+Please ensure your plugin follows the `PluginInterface` and includes appropriate error handling. Using `uvx ruff check .` and `uvx ruff format .` is highly recommended before submitting.
+
+
+## Plugin Configuration
+
+Plugins can optionally define a `config_model` that extends `PluginConfig`. When present, Mirrarr stores the plugin config as `config.json` in the same folder as `plugin.py`. Missing files are created from model defaults on first load. The config file is always JSON so users can edit it manually.

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections.abc import Sequence
 
 from app.providers import ProviderRegistry
 from app.providers.base import MovieResult, EpisodeResult
@@ -181,7 +182,7 @@ def normalize_quality_score(quality_str: str | None) -> int:
 
 
 def select_best_result(
-    results: list[MovieResult | EpisodeResult],
+    results: Sequence[MovieResult | EpisodeResult],
 ) -> MovieResult | EpisodeResult | None:
     """Select the best result: highest quality first, then smallest size.
 

@@ -57,3 +57,4 @@ class TVSeries(BaseModel):
     seasons: List[Season] = []
     genres: List[str] = []
     status: str = ""  # e.g., "Returning Series", "Ended"
+    imdb_id: Optional[str] = None

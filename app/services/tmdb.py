@@ -254,7 +254,7 @@ def _get_series_details_sync(tmdb_id: int) -> TVSeries:
     """Fetch full TV series details from TMDB including seasons and episodes (synchronous, cached)."""
     tv_api = tmdb.TV(tmdb_id)
     try:
-        info = tv_api.info()
+        info = tv_api.info(append_to_response="external_ids")
     except Exception as exc:
         logger.error("Failed to fetch series details for ID %s: %s", tmdb_id, exc)
         raise TMDBError(
@@ -327,6 +327,7 @@ def _get_series_details_sync(tmdb_id: int) -> TVSeries:
         seasons=seasons,
         genres=[g["name"] for g in info.get("genres", [])],
         status=info.get("status", ""),
+        imdb_id=info.get("external_ids", {}).get("imdb_id"),
     )
 
 

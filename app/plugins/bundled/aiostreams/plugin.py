@@ -132,11 +132,33 @@ class AIOStreamsProvider(PluginInterface):
         """Strip invalid characters from filenames."""
         return re.sub(r'[<>:"/\\|?*]', "", name).strip()
 
+    def _has_usable_streams(self, streams: list[dict[str, Any]]) -> bool:
+        """Check if any streams have a download URL."""
+        return any(s.get("url") for s in streams)
+
+    async def _get_tv_imdb_id(self, tmdb_id: int) -> str | None:
+        """Fetch IMDB ID for a TV series from TMDB."""
+        try:
+            from app.core.config import get_settings
+            settings = get_settings()
+            url = f"https://api.themoviedb.org/3/tv/{tmdb_id}/external_ids?api_key={settings.tmdb_api_key}"
+            resp = await self.session.get(url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("imdb_id")
+        except Exception:
+            logger.debug("Failed to fetch IMDB ID for TMDB %s", tmdb_id)
+        return None
+
     async def get_movie(self, movie: Movie) -> list[MovieResult]:
         """Get download links for a movie."""
-        stream_id = f"tmdb:{movie.id}"
+        # Try tmdb ID first
+        streams = await self._get_streams("movie", f"tmdb:{movie.id}")
 
-        streams = await self._get_streams("movie", stream_id)
+        # Fallback to IMDB ID if no results
+        if not self._has_usable_streams(streams) and movie.imdb_id:
+            imdb_id = movie.imdb_id if movie.imdb_id.startswith("tt") else f"tt{movie.imdb_id}"
+            streams = await self._get_streams("movie", imdb_id)
         results: list[MovieResult] = []
 
         for stream in streams:
@@ -175,9 +197,15 @@ class AIOStreamsProvider(PluginInterface):
         episode: int,
     ) -> list[EpisodeResult]:
         """Get download links for a TV episode."""
-        stream_id = f"tmdb:{series.id}:{season}:{episode}"
+        # Try tmdb ID first
+        streams = await self._get_streams("series", f"tmdb:{series.id}:{season}:{episode}")
 
-        streams = await self._get_streams("series", stream_id)
+        # Fallback to IMDB ID if no results
+        if not self._has_usable_streams(streams):
+            imdb_id = await self._get_tv_imdb_id(series.id)
+            if imdb_id:
+                imdb_id = imdb_id if imdb_id.startswith("tt") else f"tt{imdb_id}"
+                streams = await self._get_streams("series", f"{imdb_id}:{season}:{episode}")
         results: list[EpisodeResult] = []
 
         for stream in streams:

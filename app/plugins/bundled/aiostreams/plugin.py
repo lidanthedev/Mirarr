@@ -116,38 +116,12 @@ class AIOStreamsProvider(PluginInterface):
         return 0
 
     def _get_stream_size(self, stream: dict[str, Any]) -> int:
-        """Extract file size from stream data.
-
-        Some addons report folder/season size instead of file size.
-        Parse from description as fallback. If description shows
-        "file_size/folder_size" pattern, use the file size.
-        """
+        """Extract file size from stream data."""
         hints = stream.get("behaviorHints", {})
-        desc = stream.get("description", "")
-
-        # Try videoSize first (only if reasonable for a single file)
-        MAX_SINGLE_FILE_SIZE = 20 * 1024 * 1024 * 1024  # 20 GB
         size = hints.get("videoSize")
-        if isinstance(size, (int, float)) and 0 < size <= MAX_SINGLE_FILE_SIZE:
+        if isinstance(size, (int, float)) and size > 0:
             return int(size)
-
-        # Parse from description
-        # Pattern 1: "X GB/Y GB" or "X MB/Y GB" (file/folder)
-        match = re.search(r"(\d+(?:\.\d+)?)\s*(GB|MB|KB|TB)\s*/\s*\d+", desc, re.IGNORECASE)
-        if match:
-            return self._parse_size(match.group(1), match.group(2))
-
-        # Pattern 2: "X GB" or "X MB" (single size)
-        match = re.search(r"(\d+(?:\.\d+)?)\s*(GB|MB|KB|TB)", desc, re.IGNORECASE)
-        if match:
-            return self._parse_size(match.group(1), match.group(2))
-
         return 0
-
-    def _parse_size(self, value: str, unit: str) -> int:
-        """Convert size string to bytes."""
-        multipliers = {"KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
-        return int(float(value) * multipliers.get(unit.upper(), 0))
 
     def _get_filename(self, stream: dict[str, Any], default: str) -> str:
         """Extract filename from stream data."""

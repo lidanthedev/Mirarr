@@ -5,6 +5,8 @@ import re
 from typing import Any, ClassVar
 from urllib.parse import urlparse
 
+from pydantic import field_validator
+
 from app.models.media import Movie, TVSeries
 from app.providers.base import EpisodeResult, MovieResult
 from app.plugins.base import PluginConfig, PluginInterface
@@ -15,7 +17,14 @@ logger = logging.getLogger(__name__)
 class AIOStreamsConfig(PluginConfig):
     """Configuration for the AIOStreams plugin."""
 
-    manifest_url: str = ""
+    manifest_url: str
+
+    @field_validator("manifest_url")
+    @classmethod
+    def must_be_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("manifest_url must not be empty")
+        return v
 
 
 class AIOStreamsProvider(PluginInterface):

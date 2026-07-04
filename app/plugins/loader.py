@@ -39,23 +39,39 @@ def _bundled_plugins_root() -> Path:
 
 
 def seed_bundled_plugins(plugins_root: Path) -> bool:
-    """Copy bundled plugins into the data folder on first run."""
-    if plugins_root.exists():
-        return False
+    """Copy bundled plugins into the data folder.
 
+    On first run copies the entire bundled directory. On subsequent runs,
+    copies only individual bundled plugins that are missing from data/plugins.
+    Returns True if any files were copied.
+    """
     bundled_root = _bundled_plugins_root()
     if not bundled_root.exists():
         logger.warning("Bundled plugin directory not found at %s", bundled_root)
         return False
 
-    try:
-        plugins_root.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(bundled_root, plugins_root)
-        logger.info("Seeded bundled plugins into %s", plugins_root)
-        return True
-    except Exception:
-        logger.exception("Failed to seed bundled plugins into %s", plugins_root)
-        return False
+    plugins_root.parent.mkdir(parents=True, exist_ok=True)
+
+    if not plugins_root.exists():
+        try:
+            shutil.copytree(bundled_root, plugins_root)
+            logger.info("Seeded bundled plugins into %s", plugins_root)
+            return True
+        except Exception:
+            logger.exception("Failed to seed bundled plugins into %s", plugins_root)
+            return False
+
+    copied = False
+    for bundled_dir in sorted(p for p in bundled_root.iterdir() if p.is_dir()):
+        target = plugins_root / bundled_dir.name
+        if not target.exists():
+            try:
+                shutil.copytree(bundled_dir, target)
+                logger.info("Seeded new bundled plugin %s into %s", bundled_dir.name, plugins_root)
+                copied = True
+            except Exception:
+                logger.exception("Failed to seed bundled plugin %s", bundled_dir.name)
+    return copied
 
 
 def _load_module_from_path(module_name: str, module_path: Path) -> object:

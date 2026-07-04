@@ -134,10 +134,7 @@ class AIOStreamsProvider(PluginInterface):
 
     async def get_movie(self, movie: Movie) -> list[MovieResult]:
         """Get download links for a movie."""
-        if movie.imdb_id:
-            stream_id = f"tt{movie.imdb_id}"
-        else:
-            stream_id = f"tmdb:{movie.id}"
+        stream_id = f"tmdb:{movie.id}"
 
         streams = await self._get_streams("movie", stream_id)
         results: list[MovieResult] = []

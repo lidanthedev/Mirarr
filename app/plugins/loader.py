@@ -10,7 +10,9 @@ import logging
 import re
 import shutil
 import sys
+import types
 from pathlib import Path
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -26,6 +28,7 @@ from app.plugins.state import (
     sync_manifest_with_files,
 )
 from app.providers import ProviderRegistry
+from app.providers.base import ProviderInterface
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +77,7 @@ def seed_bundled_plugins(plugins_root: Path) -> bool:
     return copied
 
 
-def _load_module_from_path(module_name: str, module_path: Path) -> object:
+def _load_module_from_path(module_name: str, module_path: Path) -> types.ModuleType:
     spec = importlib.util.spec_from_file_location(module_name, module_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Unable to load plugin module from {module_path}")
@@ -94,7 +97,7 @@ def _load_module_from_path(module_name: str, module_path: Path) -> object:
     return module
 
 
-def _find_plugin_class(module: object) -> tuple[type[PluginInterface] | None, str | None]:
+def _find_plugin_class(module: types.ModuleType) -> tuple[type[PluginInterface] | None, str | None]:
     candidates: list[type[PluginInterface]] = []
     for value in module.__dict__.values():
         if not inspect.isclass(value):
@@ -155,7 +158,7 @@ def _load_plugin_config(
         return None, f"Invalid config.json: {exc}"
 
 
-def _close_provider_best_effort(provider: PluginInterface) -> None:
+def _close_provider_best_effort(provider: ProviderInterface) -> None:
     close = getattr(provider, "aclose", None)
     if close is None:
         return
@@ -181,7 +184,7 @@ def _set_entry_state(
     error_message: str | None = None,
     title: str | None = None,
 ) -> None:
-    entry.status = status  # type: ignore[assignment]
+    entry.status = status  # type: ignore[assignment] # pyright: ignore[reportAttributeAccessIssue]
     entry.error_message = error_message
     if title is not None:
         entry.title = title
@@ -213,7 +216,6 @@ def get_plugin_overview(data_dir: Path | None = None) -> list[dict[str, object]]
     """Return plugin metadata for the plugins page."""
     plugins_root = get_plugins_root(data_dir)
     manifest = get_plugin_manifest(data_dir)
-    entry_map = build_plugin_entry_map(manifest)
 
     overview: list[dict[str, object]] = []
     existing_dirs = {path.name for path in plugins_root.iterdir() if path.is_dir()} if plugins_root.exists() else set()
@@ -240,7 +242,7 @@ def get_plugin_overview(data_dir: Path | None = None) -> list[dict[str, object]]
             }
         )
 
-    overview.sort(key=lambda row: (_status_rank(str(row["status"])), int(row["order"]), str(row["plugin_id"])))
+    overview.sort(key=lambda row: (_status_rank(str(row["status"])), int(str(row["order"])), str(row["plugin_id"])))
     return overview
 
 

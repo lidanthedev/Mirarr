@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # TMDB
-    tmdb_api_key: str
+    tmdb_api_key: str = ""
 
     # Database and runtime data
     database_url: str = "sqlite:///./mirrarr.db"

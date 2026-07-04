@@ -30,11 +30,17 @@ class AIOStreamsConfig(PluginConfig):
 class AIOStreamsProvider(PluginInterface):
     """AIOStreams provider implementation."""
 
-    config_model: ClassVar[type[PluginConfig]] = AIOStreamsConfig
+    config_model: ClassVar[type[PluginConfig]] = AIOStreamsConfig  # type: ignore[assignment]
 
     @property
     def name(self) -> str:
         return "AIOStreams"
+
+    @property
+    def _aiostreams_config(self) -> AIOStreamsConfig | None:
+        if isinstance(self.config, AIOStreamsConfig):
+            return self.config
+        return None
 
     def _parse_manifest_url(self) -> tuple[str, str, str] | None:
         """Parse manifest URL to extract base_url, uuid, and encrypted_password.
@@ -42,10 +48,11 @@ class AIOStreamsProvider(PluginInterface):
         Expected format:
             https://{base_url}/stremio/{uuid}/{encrypted_password}/manifest.json
         """
-        if not self.config or not self.config.manifest_url:
+        cfg = self._aiostreams_config
+        if not cfg or not cfg.manifest_url:
             return None
 
-        url = self.config.manifest_url.rstrip("/")
+        url = cfg.manifest_url.rstrip("/")
         parsed = urlparse(url)
         path = parsed.path
 

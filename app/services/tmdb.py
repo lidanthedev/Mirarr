@@ -3,7 +3,7 @@
 import asyncio
 from cachetools import cached
 from cachetools import TTLCache
-from typing import List, Optional
+from typing import Any, List, Optional
 from enum import Enum
 
 import tmdbsimple as tmdb
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class TMDBError(Exception):
     """Domain exception for TMDB failures."""
 
-    def __init__(self, message: str, original_exception: Exception = None):
+    def __init__(self, message: str, original_exception: Exception | None = None):
         super().__init__(message)
         self.original_exception = original_exception
 
@@ -59,7 +59,7 @@ class TMDBSearchResult(BaseModel):
     vote_average: float = 0.0
 
 
-def _parse_movie_search(movie: dict) -> TMDBSearchResult:
+def _parse_movie_search(movie: dict[str, Any]) -> TMDBSearchResult:
     """Parse a movie search result from TMDB."""
     poster_path = movie.get("poster_path")
     backdrop_path = movie.get("backdrop_path")
@@ -81,7 +81,7 @@ def _parse_movie_search(movie: dict) -> TMDBSearchResult:
     )
 
 
-def _parse_series_search(series: dict) -> TMDBSearchResult:
+def _parse_series_search(series: dict[str, Any]) -> TMDBSearchResult:
     """Parse a TV series search result from TMDB."""
     poster_path = series.get("poster_path")
     backdrop_path = series.get("backdrop_path")
@@ -108,7 +108,7 @@ def _search_movies_sync(query: str) -> List[TMDBSearchResult]:
     search = tmdb.Search()
     try:
         search.movie(query=query)
-        return [_parse_movie_search(m) for m in search.results[:12]]
+        return [_parse_movie_search(m) for m in search.results[:12]]  # type: ignore[attr-defined]
     except (requests.exceptions.RequestException, tmdb.APIKeyError) as exc:
         logger.error("Error searching movies for '%s': %s", query, exc)
         return []
@@ -127,7 +127,7 @@ def _search_series_sync(query: str) -> List[TMDBSearchResult]:
     search = tmdb.Search()
     try:
         search.tv(query=query)
-        return [_parse_series_search(s) for s in search.results[:12]]
+        return [_parse_series_search(s) for s in search.results[:12]]  # type: ignore[attr-defined]
     except (requests.exceptions.RequestException, tmdb.APIKeyError) as exc:
         logger.error("Error searching series for '%s': %s", query, exc)
         return []
@@ -147,7 +147,7 @@ def _search_all_sync(query: str) -> List[TMDBSearchResult]:
     try:
         search.multi(query=query)
         results = []
-        for item in search.results[:12]:
+        for item in search.results[:12]:  # type: ignore[attr-defined]
             media_type = item.get("media_type")
             if media_type == "movie":
                 results.append(_parse_movie_search(item))

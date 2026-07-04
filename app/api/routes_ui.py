@@ -2,7 +2,6 @@
 
 from pydantic import AfterValidator
 from typing import Annotated
-from pydantic import HttpUrl
 import logging
 from pathlib import Path
 

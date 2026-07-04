@@ -68,7 +68,7 @@ async def toggle_plugin(request: Request, plugin_id: str):
 
 
 @router.post("/plugins/reorder")
-async def reorder_plugins(request: Request, payload: dict = Body(...)):
+async def reorder_plugins(request: Request, payload: dict[str, object] = Body(...)):
     """Persist plugin order and reload the runtime."""
     ordered_ids = payload.get("order", [])
     if not isinstance(ordered_ids, list):

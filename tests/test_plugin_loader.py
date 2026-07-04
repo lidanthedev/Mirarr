@@ -2,9 +2,11 @@
 import json
 from pathlib import Path
 from textwrap import dedent as td
+from typing import cast
 
 import pytest
 
+from app.plugins.base import PluginInterface
 from app.plugins.loader import load_plugins, seed_bundled_plugins
 from app.providers import ProviderRegistry
 
@@ -78,9 +80,10 @@ def test_load_plugins_with_default_config_creates_json(tmp_path: Path):
     assert loaded == ["DemoPlugin"]
     provider = ProviderRegistry.get("DemoPlugin")
     assert provider is not None
-    assert provider.config is not None
-    assert provider.config.greeting == "hello"
-    assert provider.config.retries == 3
+    plugin = cast(PluginInterface, provider)
+    assert plugin.config is not None
+    assert plugin.config.greeting == "hello"  # type: ignore[attr-defined]
+    assert plugin.config.retries == 3  # type: ignore[attr-defined]
 
     config_path = plugins_root / "demo_plugin" / "config.json"
     assert config_path.exists()
@@ -122,9 +125,10 @@ def test_load_plugins_with_existing_config(tmp_path: Path):
     assert loaded == ["ConfiguredPlugin"]
     provider = ProviderRegistry.get("ConfiguredPlugin")
     assert provider is not None
-    assert provider.config is not None
-    assert provider.config.greeting == "hola"
-    assert provider.config.retries == 7
+    plugin = cast(PluginInterface, provider)
+    assert plugin.config is not None
+    assert plugin.config.greeting == "hola"  # type: ignore[attr-defined]
+    assert plugin.config.retries == 7  # type: ignore[attr-defined]
 
 
 def test_load_plugins_skips_invalid_config(tmp_path: Path):
